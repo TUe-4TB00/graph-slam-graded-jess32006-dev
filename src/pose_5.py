@@ -36,7 +36,11 @@ def add_landmark_measurement(graph, result, pose_5, landmark):
 
 def optimize(graph, initial_estimate):
     # TODO: Initialize the optimizer 
-
+    params = gtsam.LevenbergMarquardtParams()
+    optimizer = gtsam.LevenbergMarquardtOptimizer(graph, initial_estimate, params)
+    result = optimizer.optimize() # Running the optimization
+    # Print the optimized result
+    # print("\nFinal Result:\n{}".format(result))
 
     # TODO: Perform the optimization and print the result
 
@@ -44,19 +48,42 @@ def optimize(graph, initial_estimate):
 
 def minimize_marginals(graph, initial_estimate, pose_options):
     #TODO: try different pose and landmark options here, and keep the one with the lowest sum of marginals.
-    best_pose = "a"      # chosen pose option
-    best_landmark = 1    # chosen landmark (1 or 2)
-    pose_5 = pose_options[best_pose]
-    graph, initial_estimate = add_pose(graph, initial_estimate, pose_5)
-    result = optimize(graph, initial_estimate)
-    graph = add_landmark_measurement(graph, result, pose_5, best_landmark)
-    result = optimize(graph, initial_estimate)
+    best_pose = None      # chosen pose option
+    best_landmark = None   # chosen landmark (1 or 2).
+    lowest_sum_of_marginals=10000
+    # graph_temp=graph
+    # initial_estimate_temp=initial_estimate
+    graph_temp = gtsam.NonlinearFactorGraph(graph)
+    initial_estimate_temp = gtsam.Values(initial_estimate)
 
-    # TODO: Calculate marginal covariances for the relevant variables and visualize the updated factor graph with covariances
-    marginals = []
-    # The sum of the marginals for each landmark can be computed using marginals.marginalCovariance(L(x)).sum()
-    sum_of_marginals = 0
-    return best_pose, best_landmark, sum_of_marginals
+    for i in pose_options:
+        pose = pose_options[i]
+        for landmark in range(1,3):
+            graph_temp, initial_estimate_temp = add_pose(graph_temp, initial_estimate_temp, pose)
+            result = optimize(graph_temp, initial_estimate_temp)
+            graph_temp = add_landmark_measurement(graph_temp, result, pose, landmark)
+            result = optimize(graph_temp, initial_estimate_temp)
+
+            # TODO: Calculate marginal covariances for the relevant variables and visualize the updated factor graph with covariances
+            marginals = gtsam.Marginals(graph_temp, result)
+            # The sum of the marginals for each landmark can be computed using marginals.marginalCovariance(L(x)).sum()
+            sum_of_marginals = marginals.marginalCovariance(L(landmark)).sum()
+            if sum_of_marginals < lowest_sum_of_marginals:
+                print(f"{i} with landmark {landmark} is best so far, sum of marginals {sum_of_marginals}\n")
+                best_pose=pose
+                best_landmark=landmark
+                lowest_sum_of_marginals=sum_of_marginals
+                best_graph = gtsam.NonlinearFactorGraph(graph_temp)
+                best_initial_estimate = gtsam.Values(initial_estimate_temp)
+                best_graph=graph_temp
+                best_initial_estimate=initial_estimate_temp
+
+            # setting the workable pieces to default again
+            graph_temp = gtsam.NonlinearFactorGraph(graph)
+            initial_estimate_temp = gtsam.Values(initial_estimate)
+    graph=gtsam.NonLinearFactorGraph(best_graph)
+    initial_estimate=gtsam.Values(best_initial_estimate)
+    return best_pose, best_landmark, lowest_sum_of_marginals
 
 def minimize_errors(graph, initial_estimate, pose_options):
     #TODO: try different pose and landmark options here, and keep the one with the lowest resulting error.
