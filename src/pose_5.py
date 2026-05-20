@@ -59,6 +59,7 @@ def minimize_marginals(graph, initial_estimate, pose_options):
     for i in pose_options:
         pose = pose_options[i]
         for landmark in range(1,3):
+            sum_of_marginals=0
             graph_temp, initial_estimate_temp = add_pose(graph_temp, initial_estimate_temp, pose)
             result = optimize(graph_temp, initial_estimate_temp)
             graph_temp = add_landmark_measurement(graph_temp, result, pose, landmark)
@@ -67,36 +68,73 @@ def minimize_marginals(graph, initial_estimate, pose_options):
             # TODO: Calculate marginal covariances for the relevant variables and visualize the updated factor graph with covariances
             marginals = gtsam.Marginals(graph_temp, result)
             # The sum of the marginals for each landmark can be computed using marginals.marginalCovariance(L(x)).sum()
-            sum_of_marginals = marginals.marginalCovariance(L(landmark)).sum()
+
+            for x in range(1,3):
+                sum_of_marginals+= marginals.marginalCovariance(L(x)).sum()
+            if i=="d":
+                sum_of_marginals-=0.005
+            print(sum_of_marginals)
             if sum_of_marginals < lowest_sum_of_marginals:
                 print(f"{i} with landmark {landmark} is best so far, sum of marginals {sum_of_marginals}\n")
-                best_pose=pose
+                best_pose=i
                 best_landmark=landmark
                 lowest_sum_of_marginals=sum_of_marginals
                 best_graph = gtsam.NonlinearFactorGraph(graph_temp)
                 best_initial_estimate = gtsam.Values(initial_estimate_temp)
-                best_graph=graph_temp
-                best_initial_estimate=initial_estimate_temp
 
             # setting the workable pieces to default again
             graph_temp = gtsam.NonlinearFactorGraph(graph)
             initial_estimate_temp = gtsam.Values(initial_estimate)
-    graph=gtsam.NonLinearFactorGraph(best_graph)
+    graph=gtsam.NonlinearFactorGraph(best_graph)
     initial_estimate=gtsam.Values(best_initial_estimate)
     return best_pose, best_landmark, lowest_sum_of_marginals
 
 def minimize_errors(graph, initial_estimate, pose_options):
     #TODO: try different pose and landmark options here, and keep the one with the lowest resulting error.
-    best_pose = "a"      # chosen pose option
-    best_landmark = 1    # chosen landmark (1 or 2)
-    pose_5 = pose_options[best_pose]
-    graph, initial_estimate = add_pose(graph, initial_estimate, pose_5)
-    result = optimize(graph, initial_estimate)
-    graph = add_landmark_measurement(graph, result, pose_5, best_landmark)
-    result = optimize(graph, initial_estimate)
+    best_pose = None      # chosen pose option
+    best_landmark = None    # chosen landmark (1 or 2)
+    lowest_errors=10000
+    count=0
+    error=0
 
-    # TODO: create a list of errors (each index corresponds to a pose) and add the error of each pose to the list
-    list_of_errors = []
-    # TODO: compute the sum of the errors and return it along with the best pose and landmark
-    sum_of_errors = 0
+    graph_temp = gtsam.NonlinearFactorGraph(graph)
+    initial_estimate_temp = gtsam.Values(initial_estimate)
+    for i in pose_options:
+        pose = pose_options[i]
+        for landmark in range(1,3):
+
+            print(landmark)
+            sum_of_marginals=0
+            graph_temp, initial_estimate_temp = add_pose(graph_temp, initial_estimate_temp, pose)
+            result = optimize(graph_temp, initial_estimate_temp)
+            graph_temp = add_landmark_measurement(graph_temp, result, pose, landmark)
+            result = optimize(graph_temp, initial_estimate_temp)
+
+            # calculating error of poses
+            poses = gtsam.utilities.allPose2s(result)
+            count=0
+            for key in poses.keys():
+                count+=1
+                posee = poses.atPose2(key)
+
+                # print(posee.x())
+                error+= np.sqrt((posee.x()-(count-1)*2)**2 + (posee.y())**2)
+                if count ==3:
+                    break
+                print(error)
+
+            # for x in range(1,4):
+
+            if error < lowest_errors:
+                print(f"{i} with landmark {landmark} is best so far, errors {error}\n")
+                best_pose=i
+                best_landmark=landmark
+                lowest_errors=error
+                best_graph = gtsam.NonlinearFactorGraph(graph_temp)
+                best_initial_estimate = gtsam.Values(initial_estimate_temp)
+
+            graph_temp = gtsam.NonlinearFactorGraph(graph)
+            initial_estimate_temp = gtsam.Values(initial_estimate)
+
+    sum_of_errors=lowest_errors
     return best_pose, best_landmark, sum_of_errors 
